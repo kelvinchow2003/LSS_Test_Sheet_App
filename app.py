@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import zipfile
 import shutil
-from form_logic import process_efa, process_bronze_med, process_bronze_cross
+from form_logic import process_efa, process_bronze_med, process_bronze_cross, process_bronze_star
 
 app = Flask(__name__)
 
@@ -26,6 +26,10 @@ FORM_CONFIG = {
     "bronze_cross": {
         "filename": "95tsbronzecross2020_fillable.pdf",
         "func": process_bronze_cross
+    },
+    "bronze_star": {
+        "filename": "95tsbronzestar2020_fillable.pdf",
+        "func": process_bronze_star
     }
 }
 
