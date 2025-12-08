@@ -284,4 +284,106 @@ def process_bronze_star(df, template_path, output_folder):
         generated_files.append(out_name)
 
     return generated_files
+
+    # --- STANDARD FIRST AID LOGIC ---
+
+def process_sfa(df, template_path, output_folder):
+
+    # Mapping for Standard First Aid (1-10)
+
+    candidate_map = []
+
+    for i in range(1, 11):
+
+        suffix = str(i)
+
+        entry = {
+
+            "name": f"NAME {suffix}",
+
+            "addr": f"Address {suffix}",
+
+            "apt":  f"Apt# {suffix}",
+
+            "city": f"City {suffix}",
+
+            "zip":  f"Postal Code {suffix}", # Specific to SFA form
+
+            "email": f"Email {suffix}",
+
+            "phone": f"Phone {suffix}",
+
+            "dd": f"Day {suffix}",
+
+            "mm": f"Month {suffix}",
+
+            "yy": f"Year {suffix}"
+
+        }
+
+        candidate_map.append(entry)
+
+    BATCH_SIZE = 10
+
+    total_batches = math.ceil(len(df) / BATCH_SIZE)
+
+    generated_files = []
+
+    for b in range(total_batches):
+
+        batch_df = df.iloc[b * BATCH_SIZE : (b + 1) * BATCH_SIZE]
+
+        reader = PdfReader(template_path)
+
+        writer = PdfWriter()
+
+        writer.append(reader)
+
+        data_map = {}
+
+        for i, (idx, row) in enumerate(batch_df.iterrows()):
+
+            if i >= len(candidate_map): break
+
+            fields = candidate_map[i]
+
+            full_name = clean_name(row.get("AttendeeName", ""))
+
+            # SFA typically uses full 4-digit year
+
+            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=True)
+
+            data_map[fields["name"]] = full_name
+
+            data_map[fields["addr"]] = str(row.get("Street", ""))
+
+            # CSV usually lacks Apt column, leaving blank as per your script
+
+            data_map[fields["apt"]] = "" 
+
+            data_map[fields["city"]] = str(row.get("City", ""))
+
+            data_map[fields["zip"]] = str(row.get("PostalCode", ""))
+
+            data_map[fields["email"]] = str(row.get("E-mail", ""))
+
+            data_map[fields["phone"]] = str(row.get("AttendeePhone", ""))
+
+            data_map[fields["dd"]] = dd
+
+            data_map[fields["mm"]] = mm
+
+            data_map[fields["yy"]] = yy
+
+        for page in writer.pages:
+
+            writer.update_page_form_field_values(page, data_map)
+
+        out_name = os.path.join(output_folder, f"SFA_Exam_Sheet_{b+1}.pdf")
+
+        with open(out_name, "wb") as f: writer.write(f)
+
+        generated_files.append(out_name)
+
+    return generated_files
  
