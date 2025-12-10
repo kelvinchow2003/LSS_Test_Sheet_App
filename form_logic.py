@@ -1,389 +1,323 @@
-import pandas as pd
-from pypdf import PdfReader, PdfWriter
-import math
-import os
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automator | Kelvin Chow</title>
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%2310b981'/><text x='50%' y='50%' dominant-baseline='central' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='350' fill='white'>K</text></svg>">
 
-# --- UTILS ---
-def clean_name(raw_name):
-    if pd.isna(raw_name): return ""
-    raw_name = str(raw_name)
-    if "," in raw_name:
-        parts = raw_name.split(",")
-        if len(parts) >= 2:
-            return f"{parts[1].strip()} {parts[0].strip()}"
-    return raw_name
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
 
-def parse_date(raw_dob, use_full_year=True):
-    dd, mm, yy = "", "", ""
-    if pd.notna(raw_dob):
-        try:
-            dt = pd.to_datetime(raw_dob, dayfirst=True)
-            dd = str(dt.day).zfill(2)
-            mm = str(dt.month).zfill(2)
-            yy = str(dt.year) if use_full_year else str(dt.year)[-2:]
-        except: pass
-    return dd, mm, yy
-
-# --- EMERGENCY FIRST AID LOGIC ---
-def process_efa(df, template_path, output_folder):
-    # Mapping for EFA (1-10)
-    candidate_map = []
-    for i in range(1, 11):
-        suffix = str(i)
-        entry = {
-            "name": f"Name {suffix}", "addr": f"Address {suffix}", "city": f"City {suffix}",
-            "zip": f"Postal {suffix}", "email": f"Email {suffix}", "phone": f"Phone {suffix}",
-            "dd": f"Day {suffix}", "mm": f"Month {suffix}", "yy": f"Year {suffix}"
+    <style>
+        :root {
+            /* --- COLORS --- */
+            --bg-start: #111827; 
+            --bg-end: #000000;
+            --overlay-start: rgba(6, 78, 59, 0.2); 
+            --overlay-end: rgba(22, 78, 99, 0.2);
+            --accent-primary: #10b981; 
+            --glass-bg: rgba(17, 24, 39, 0.6);
+            --glass-border: rgba(55, 65, 81, 0.3);
+            --text-white: #ffffff;
+            --text-muted: #9ca3af;
         }
-        if i == 10: entry["name"] = "10"
-        candidate_map.append(entry)
 
-    BATCH_SIZE = 10
-    total_batches = math.ceil(len(df) / BATCH_SIZE)
-    generated_files = []
+        body {
+            background: linear-gradient(to bottom right, var(--bg-start), var(--bg-end));
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-white);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
 
-    for b in range(total_batches):
-        batch_df = df.iloc[b * BATCH_SIZE : (b + 1) * BATCH_SIZE]
-        reader = PdfReader(template_path)
-        writer = PdfWriter()
-        writer.append(reader)
-        data_map = {}
+        .ambient-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom right, var(--overlay-start), var(--overlay-end));
+            z-index: -1;
+            pointer-events: none;
+        }
 
-        for i, (idx, row) in enumerate(batch_df.iterrows()):
-            if i >= len(candidate_map): break
-            fields = candidate_map[i]
-            full_name = clean_name(row.get("AttendeeName", ""))
-            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=True)
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+            100% { transform: translateY(0px); }
+        }
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
 
-            data_map[fields["name"]] = full_name
-            data_map[fields["addr"]] = str(row.get("Street", ""))
-            data_map[fields["city"]] = str(row.get("City", ""))
-            data_map[fields["zip"]] = str(row.get("PostalCode", ""))
-            data_map[fields["email"]] = str(row.get("E-mail", ""))
-            data_map[fields["phone"]] = str(row.get("AttendeePhone", ""))
-            data_map[fields["dd"]] = dd; data_map[fields["mm"]] = mm; data_map[fields["yy"]] = yy
+        /* --- Glass Card Styles --- */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--glass-border);
+            border-radius: 0.75rem;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            position: relative;
+            transition: all 0.3s ease;
+        }
 
-        for page in writer.pages:
-            writer.update_page_form_field_values(page, data_map)
+        .glass-card:hover {
+            box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.2);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
 
-        out_name = os.path.join(output_folder, f"EFA_Batch_{b+1}.pdf")
-        with open(out_name, "wb") as f: writer.write(f)
-        generated_files.append(out_name)
-    
-    return generated_files
+        h2 { font-weight: 900; letter-spacing: -0.025em; margin-bottom: 0.5rem; color: white; }
+        .highlight-text { color: var(--accent-primary); }
+        p.desc { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; }
 
-# --- BRONZE MEDALLION LOGIC ---
-def process_bronze_med(df, template_path, output_folder):
-    candidate_map = [
-        {"base": "1", "s": ".0"}, {"base": "1", "s": ".1.0"}, {"base": "1", "s": ".1.1.0"},
-        {"base": "1", "s": ".1.1.1.0"}, {"base": "1", "s": ".1.1.1.1.0"}, {"base": "1", "s": ".1.1.1.1.1"},
-        {"base": "", "s": ".0.0"}, {"base": "", "s": ".0.1.0"}, {"base": "", "s": ".0.1.1.0"},
-        {"base": "", "s": ".0.1.1.1.0"}, {"base": "", "s": ".0.1.1.1.1.0"}, {"base": "", "s": ".0.1.1.1.1.1.0"},
-        {"base": "", "s": ".0.1.1.1.1.1.1"},
-    ]
-    
-    BATCH_SIZE = 13
-    total_batches = math.ceil(len(df) / BATCH_SIZE)
-    generated_files = []
+        /* --- Form Elements --- */
+        .form-label { color: var(--text-white); font-size: 0.9rem; font-weight: 600; display: block; text-align: left; margin-bottom: 0.5rem; }
+        
+        .custom-input {
+            background: rgba(17, 24, 39, 0.8); 
+            border: 1px solid rgba(75, 85, 99, 0.4);
+            color: white;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            outline: none;
+            font-family: 'Outfit', sans-serif;
+        }
+        .custom-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2); }
 
-    for b in range(total_batches):
-        batch_df = df.iloc[b * BATCH_SIZE : (b + 1) * BATCH_SIZE]
-        reader = PdfReader(template_path)
-        writer = PdfWriter()
-        writer.append(reader)
-        data_map = {}
+        input[type="file"]::file-selector-button {
+            background: rgba(255, 255, 255, 0.1); border: none; color: white; padding: 5px 12px;
+            margin-right: 12px; border-radius: 4px; cursor: pointer; transition: 0.2s;
+        }
+        input[type="file"]::file-selector-button:hover { background: rgba(255, 255, 255, 0.2); }
 
-        for i, (idx, row) in enumerate(batch_df.iterrows()):
-            if i >= len(candidate_map): break
-            slot = candidate_map[i]
-            base, s = slot["base"], slot["s"]
+        select.custom-input {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em;
+        }
+        option { background-color: #111827; color: white; }
+
+        .btn-portfolio {
+            background: rgba(5, 150, 105, 0.8); border: 1px solid rgba(16, 185, 129, 0.5); color: white;
+            padding: 0.75rem 1.5rem; border-radius: 9999px; width: 100%; font-weight: 600; font-size: 1rem;
+            margin-top: 1.5rem; transition: all 0.3s; backdrop-filter: blur(4px);
+            box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.5);
+        }
+        .btn-portfolio:hover { background: rgba(16, 185, 129, 0.9); transform: scale(1.02); }
+        .btn-portfolio:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+
+        .footer-link { display: block; margin-top: 2rem; font-size: 0.85rem; color: var(--text-muted); text-decoration: none; transition: 0.3s; }
+        .footer-link:hover { color: var(--accent-primary); }
+        
+        .spinner { display: none; width: 1.2rem; height: 1.2rem; border: 2px solid rgba(255,255,255,0.3); border-top: 2px solid white; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading .spinner { display: inline-block; }
+
+        /* --- Privacy Badge --- */
+        .privacy-badge {
+            margin-top: 1.5rem;
+            display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+            font-size: 0.75rem; color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.03); padding: 0.5rem 1rem; border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.05); transition: 0.3s;
+        }
+        .privacy-badge:hover { color: var(--accent-primary); border-color: rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.05); }
+
+        /* --- Instructions Button --- */
+        .info-btn {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--text-muted); width: 32px; height: 32px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;
+        }
+        .info-btn:hover { background: var(--accent-primary); color: white; border-color: var(--accent-primary); }
+
+        /* --- Modal Styles --- */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px);
+            z-index: 1000; display: none; align-items: center; justify-content: center;
+            opacity: 0; transition: opacity 0.3s ease;
+        }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        
+        .modal-glass {
+            background: #1f2937; /* Solid dark background for readability */
+            border: 1px solid var(--glass-border); border-radius: 1rem; padding: 2rem;
+            width: 90%; max-width: 500px; text-align: left; position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transform: scale(0.95); transition: transform 0.3s ease;
+        }
+        .modal-overlay.active .modal-glass { transform: scale(1); }
+
+        .modal-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; color: white; display: flex; align-items: center; }
+        .modal-step { margin-bottom: 1rem; color: #d1d5db; font-size: 0.95rem; }
+        .modal-step strong { color: var(--accent-primary); display: block; margin-bottom: 0.25rem; }
+        
+        .close-modal {
+            position: absolute; top: 1.5rem; right: 1.5rem; cursor: pointer; color: var(--text-muted); transition: 0.2s;
+        }
+        .close-modal:hover { color: white; }
+
+    </style>
+</head>
+<body>
+
+    <div class="ambient-overlay"></div>
+
+    <div class="container d-flex justify-content-center">
+        <div class="glass-card animate-float">
             
-            full_name = clean_name(row.get("AttendeeName", ""))
-            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=False) # 2 digit year
-
-            data_map[f"Name{base}{s}"] = full_name
-            data_map[f"Address{base}{s}"] = str(row.get("Street", ""))
-            data_map[f"City{base}{s}"] = str(row.get("City", ""))
-            data_map[f"Postal{base}{s}"] = str(row.get("PostalCode", ""))
-            data_map[f"Email{base}{s}"] = str(row.get("E-mail", ""))
-            data_map[f"Phone{base}{s}"] = str(row.get("AttendeePhone", ""))
-            data_map[f"DOBD{base}{s}"] = dd; data_map[f"DOBM{base}{s}"] = mm; data_map[f"DOBY{base}{s}"] = yy
-
-        for page in writer.pages: writer.update_page_form_field_values(page, data_map)
-
-        out_name = os.path.join(output_folder, f"BronzeMed_Batch_{b+1}.pdf")
-        with open(out_name, "wb") as f: writer.write(f)
-        generated_files.append(out_name)
-    return generated_files
-
-# --- BRONZE CROSS LOGIC ---
-def process_bronze_cross(df, template_path, output_folder):
-    candidate_map = [
-        {"p": "", "s": ".0"}, {"p": "", "s": ".1.0"}, {"p": "", "s": ".1.1.0"},
-        {"p": "", "s": ".1.1.1.0"}, {"p": "", "s": ".1.1.1.1.0"}, {"p": "", "s": ".1.1.1.1.1"},
-        {"p": "7", "s": ".0"}, {"p": "8", "s": ".1.0"},
-        {"p": "9", "s": ".1.1.0", "addr_override": ["Address1.1.1.0X", "Address1.1.1", "Address1.1.1.0", "Address1.1.0", "Address1.0", "Address1", "Address1.1", "Text2", "Text16", "Text17"]},
-        {"p": "10", "s": ".1.1.1.0", "name_override": "10"},
-        {"p": "11", "s": ".1.1.1.1.0"}, {"p": "12", "s": ".1.1.1.1.1"}, {"p": "13", "s": ".1.1.1.1.1"}
-    ]
-
-    BATCH_SIZE = 13
-    total_batches = math.ceil(len(df) / BATCH_SIZE)
-    generated_files = []
-
-    for b in range(total_batches):
-        batch_df = df.iloc[b * BATCH_SIZE : (b + 1) * BATCH_SIZE]
-        reader = PdfReader(template_path)
-        writer = PdfWriter()
-        writer.append(reader)
-        data_map = {}
-
-        for i, (idx, row) in enumerate(batch_df.iterrows()):
-            if i >= len(candidate_map): break
-            slot = candidate_map[i]
-            p, s = slot.get("p", ""), slot.get("s", "")
-            prefix = p if p else ""
-
-            f_name = slot.get("name_override", f"{prefix}Name1{s}")
-            full_name = clean_name(row.get("AttendeeName", ""))
-            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=False)
-
-            data_map[f_name] = full_name
-            data_map[f"{prefix}City1{s}"] = str(row.get("City", ""))
-            data_map[f"{prefix}Postal1{s}"] = str(row.get("PostalCode", ""))
-            data_map[f"{prefix}Email1{s}"] = str(row.get("E-mail", ""))
-            data_map[f"{prefix}Phone1{s}"] = str(row.get("AttendeePhone", ""))
-            data_map[f"{prefix}DOBD1{s}"] = dd; data_map[f"{prefix}DOBM1{s}"] = mm; data_map[f"{prefix}DOBY1{s}"] = yy
-
-            # Handle Address Override (The Shotgun Approach)
-            addr_val = str(row.get("Street", ""))
-            if "addr_override" in slot:
-                overrides = slot["addr_override"]
-                if isinstance(overrides, list):
-                    for f in overrides: data_map[f] = addr_val
-                else:
-                    data_map[overrides] = addr_val
-            else:
-                data_map[f"{prefix}Address1{s}"] = addr_val
-
-        for page in writer.pages: writer.update_page_form_field_values(page, data_map)
-
-        out_name = os.path.join(output_folder, f"BronzeCross_Batch_{b+1}.pdf")
-        with open(out_name, "wb") as f: writer.write(f)
-        generated_files.append(out_name)
-    return generated_files
-
-# ... (existing imports and functions) ...
-
-# --- BRONZE STAR LOGIC (Based on your provided script) ---
-
-def process_bronze_star(df, template_path, output_folder):
-
-    # The exact mapping from your script
-
-    candidate_map = [
-
-        # === PAGE 1 (Candidates 1-6) ===
-
-        {"type": "explicit", "s": "1"}, 
-
-        {"type": "explicit", "s": "2"}, 
-
-        {"type": "explicit", "s": "3"}, 
-
-        {"type": "explicit", "s": "4"}, 
-
-        {"type": "explicit", "s": "5"}, 
-
-        {"type": "explicit", "s": "6"}, 
-
-        # === PAGE 2 (Candidates 7-13) ===
-
-        {"type": "dot", "s": ".0"},           
-
-        {"type": "dot", "s": ".1.0"},         
-
-        {"type": "dot", "s": ".1.1.0"},       
-
-        {"type": "dot", "s": ".1.1.1.0"},     
-
-        {"type": "dot", "s": ".1.1.1.1.0"},   
-
-        {"type": "dot", "s": ".1.1.1.1.1.0"}, 
-
-        {"type": "dot", "s": ".1.1.1.1.1.1"},
-
-    ]
-
-    BATCH_SIZE = 13
-
-    total_batches = math.ceil(len(df) / BATCH_SIZE)
-
-    generated_files = []
-
-    for b in range(total_batches):
-
-        batch_df = df.iloc[b * BATCH_SIZE : (b + 1) * BATCH_SIZE]
-
-        reader = PdfReader(template_path)
-
-        writer = PdfWriter()
-
-        writer.append(reader)
-
-        data_map = {}
-
-        for i, (idx, row) in enumerate(batch_df.iterrows()):
-
-            if i >= len(candidate_map): break
-
-            slot = candidate_map[i]
-
-            suffix = slot["s"]
-
-            # --- DATA PREP ---
-
-            full_name = clean_name(row.get("AttendeeName", ""))
-
-            # Use existing helper to get 2-digit year (YY)
-
-            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=False)
-
-            # --- BUILD FIELD NAMES ---
-
-            # Note: Whether "explicit" (1) or "dot" (.0), the format Name{suffix} works for both
-
-            # e.g., Name1 or Name.0
-
-            data_map[f"Name{suffix}"] = full_name
-
-            data_map[f"Address{suffix}"] = str(row.get("Street", ""))
-
-            data_map[f"City{suffix}"] = str(row.get("City", ""))
-
-            data_map[f"Postal{suffix}"] = str(row.get("PostalCode", ""))
-
-            data_map[f"Email{suffix}"] = str(row.get("E-mail", ""))
-
-            data_map[f"Phone{suffix}"] = str(row.get("AttendeePhone", ""))
-
-            data_map[f"DOBD{suffix}"] = dd
-
-            data_map[f"DOBM{suffix}"] = mm
-
-            data_map[f"DOBY{suffix}"] = yy
-
-        for page in writer.pages:
-
-            writer.update_page_form_field_values(page, data_map)
-
-        out_name = os.path.join(output_folder, f"BronzeStar_Batch_{b+1}.pdf")
-
-        with open(out_name, "wb") as f: writer.write(f)
-
-        generated_files.append(out_name)
-
-    return generated_files
-
-    # --- STANDARD FIRST AID LOGIC ---
-
-def process_sfa(df, template_path, output_folder):
-
-    # Mapping for Standard First Aid (1-10)
-
-    candidate_map = []
-
-    for i in range(1, 11):
-
-        suffix = str(i)
-
-        entry = {
-
-            "name": f"NAME {suffix}",
-
-            "addr": f"Address {suffix}",
-
-            "apt":  f"Apt# {suffix}",
-
-            "city": f"City {suffix}",
-
-            "zip":  f"Postal Code {suffix}", # Specific to SFA form
-
-            "email": f"Email {suffix}",
-
-            "phone": f"Phone {suffix}",
-
-            "dd": f"Day {suffix}",
-
-            "mm": f"Month {suffix}",
-
-            "yy": f"Year {suffix}"
-
-        }
-
-        candidate_map.append(entry)
-
-    BATCH_SIZE = 10
-
-    total_batches = math.ceil(len(df) / BATCH_SIZE)
-
-    generated_files = []
-
-    for b in range(total_batches):
-
-        batch_df = df.iloc[b * BATCH_SIZE : (b + 1) * BATCH_SIZE]
-
-        reader = PdfReader(template_path)
-
-        writer = PdfWriter()
-
-        writer.append(reader)
-
-        data_map = {}
-
-        for i, (idx, row) in enumerate(batch_df.iterrows()):
-
-            if i >= len(candidate_map): break
-
-            fields = candidate_map[i]
-
-            full_name = clean_name(row.get("AttendeeName", ""))
-
-            # SFA typically uses full 4-digit year
-
-            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=True)
-
-            data_map[fields["name"]] = full_name
-
-            data_map[fields["addr"]] = str(row.get("Street", ""))
-
-            # CSV usually lacks Apt column, leaving blank as per your script
-
-            data_map[fields["apt"]] = "" 
-
-            data_map[fields["city"]] = str(row.get("City", ""))
-
-            data_map[fields["zip"]] = str(row.get("PostalCode", ""))
-
-            data_map[fields["email"]] = str(row.get("E-mail", ""))
-
-            data_map[fields["phone"]] = str(row.get("AttendeePhone", ""))
-
-            data_map[fields["dd"]] = dd
-
-            data_map[fields["mm"]] = mm
-
-            data_map[fields["yy"]] = yy
-
-        for page in writer.pages:
-
-            writer.update_page_form_field_values(page, data_map)
-
-        out_name = os.path.join(output_folder, f"SFA_Exam_Sheet_{b+1}.pdf")
-
-        with open(out_name, "wb") as f: writer.write(f)
-
-        generated_files.append(out_name)
-
-    return generated_files
- 
+            <button class="info-btn" id="infoBtn" title="How to use">
+                <i data-lucide="help-circle" width="18"></i>
+            </button>
+
+            <h2>Test Sheet <span class="highlight-text">Automator</span></h2>
+            <p class="desc">Took Someone Long Enough...</p>
+
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="mb-4">
+                    <label class="form-label">Upload File (CSV)</label>
+                    <input type="file" class="custom-input" name="csv_file" accept=".csv" required>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label">Select Course</label>
+                    <select class="custom-input" name="form_type" required>
+                        <option value="" selected disabled>Choose Test Sheet...</option>
+                        <option value="efa">Emergency First Aid (2014)</option>
+                        <option value="bronze_med">Bronze Medallion (2020)</option>
+                        <option value="bronze_cross">Bronze Cross (2020)</option>
+                        <option value="bronze_star">Bronze Star (2020)</option>
+                        <option value="sfa">Standard First Aid (2023)</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-portfolio" id="submitBtn">
+                    <div class="spinner"></div>
+                    <span id="btnText">Generate PDFs</span>
+                </button>
+            </form>
+
+            <div class="privacy-badge">
+                <i data-lucide="shield-check" width="14"></i>
+                <span>Data is not stored. Processed in-memory only.</span>
+            </div>
+
+            <a href="https://kelvinchow2003.github.io/kelvin-portfolio-2025/" class="footer-link">
+                &larr; Developed By Kelvin Chow
+            </a>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="instructionsModal">
+        <div class="modal-glass">
+            <button class="close-modal" id="closeModal">
+                <i data-lucide="x" width="24"></i>
+            </button>
+            
+            <div class="modal-title">
+                <i data-lucide="file-text" width="24" class="me-2 text-success"></i> 
+                Instructions
+            </div>
+            
+            <div class="modal-step">
+                <strong>1. Prepare your CSV</strong>
+                Your file <u>must</u> include these required headers (additional columns are allowed): <br>
+                <code style="color: #6ee7b7;">AttendeeName, Street, City, PostalCode, E-mail, AttendeePhone, DateOfBirth</code>
+            </div>
+            
+            <div class="modal-step">
+                <strong>2. Upload & Select</strong>
+                Upload your CSV file and select the correct Lifesaving Society form from the dropdown menu.
+            </div>
+            
+            <div class="modal-step">
+                <strong>3. Generate & Download</strong>
+                Click "Generate PDFs". A ZIP file containing all filled test sheets will download automatically.
+            </div>
+
+            <div class="modal-step" style="margin-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+                <strong style="color: #9ca3af; font-size: 0.9rem;">Privacy Notice</strong>
+                <span style="font-size: 0.85rem; color: #6b7280;">
+                    This tool runs entirely in ephemeral memory. No CSV files or personal data are saved to a database or disk storage.
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // --- MODAL LOGIC ---
+        const infoBtn = document.getElementById('infoBtn');
+        const modal = document.getElementById('instructionsModal');
+        const closeModal = document.getElementById('closeModal');
+
+        infoBtn.addEventListener('click', () => modal.classList.add('active'));
+        closeModal.addEventListener('click', () => modal.classList.remove('active'));
+        
+        // Close when clicking outside the box
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.remove('active');
+        });
+
+        // --- FORM LOGIC ---
+        const form = document.getElementById('uploadForm');
+        const btn = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const originalText = btnText.textContent;
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            btn.classList.add('loading');
+            btn.disabled = true;
+            btnText.textContent = "Processing...";
+
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = "Filled_Forms.zip";
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(downloadUrl);
+                } else {
+                    alert("Error processing file. Please check your CSV.");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("An unexpected error occurred.");
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+                btnText.textContent = originalText;
+            }
+        });
+    </script>
+</body>
+</html>
