@@ -3,7 +3,7 @@ from pypdf import PdfReader, PdfWriter
 import math
 import os
 
-# --- UTILS ---
+# --- SHARED UTILS ---
 def clean_name(raw_name):
     if pd.isna(raw_name): return ""
     raw_name = str(raw_name)
@@ -24,17 +24,67 @@ def parse_date(raw_dob, use_full_year=True):
         except: pass
     return dd, mm, yy
 
+# --- COMMON HOST DATA (Used across Bronze Levels) ---
+BRONZE_HOST_DATA = {
+    "host_name": "City of Markham",
+    "host_area_code": "905",
+    "host_phone_num": "4703590 EXT 4342",
+    "host_addr": "8600 McCowan Road",
+    "host_city": "Markham",
+    "host_prov": "ON",
+    "host_postal": "L3P 3M2",
+    "facility_name": "Centennial C.C."
+}
+
+# Mapping for Bronze Medallion, Cross, and Star Invoice Fields
+BRONZE_HOST_FIELD_MAP = {
+    "host_name": "Text19",      
+    "host_area_code": "Text20", 
+    "host_phone_num": "Text21", 
+    "host_addr": "Text22",      
+    "host_city": "Text23",      
+    "host_prov": "Text24",      
+    "host_postal": "Text25",    
+    "facility_name": "Text29"   
+}
+
 # --- EMERGENCY FIRST AID LOGIC ---
 def process_efa(df, template_path, output_folder):
-    # Mapping for EFA (1-10)
+    # Host Data specific to EFA (Keys match PDF fields directly)
+    HOST_DATA = {
+        "Host Name": "City of Markham",
+        "Host Address": "8600 McCowan Road",
+        "Host City": "Markham",
+        "Host Province": "ON",
+        "Host Postal Code": "L3P 3M2",
+        "Host Area Code": "905",
+        "Host Number": "470-3590 EXT 4342",
+        "Facility Name": "Centennial C.C.",
+        "Facility Area Code": "905",
+        "Facility Number": "470-3590 EXT 4342",
+        # Fallbacks
+        "Host Phone": "905-470-3590",
+        "Facility Phone": "905-470-3590",
+        "Telephone": "905-470-3590",
+        "Phone": "905-470-3590"
+    }
+
     candidate_map = []
     for i in range(1, 11):
         suffix = str(i)
         entry = {
-            "name": f"Name {suffix}", "addr": f"Address {suffix}", "city": f"City {suffix}",
-            "zip": f"Postal {suffix}", "email": f"Email {suffix}", "phone": f"Phone {suffix}",
-            "dd": f"Day {suffix}", "mm": f"Month {suffix}", "yy": f"Year {suffix}"
+            "name": f"Name {suffix}", 
+            "addr": f"Address {suffix}", 
+            "apt":  f"apt {suffix}", # Lowercase 'apt' matches your script
+            "city": f"City {suffix}",
+            "zip":  f"Postal {suffix}", 
+            "email": f"Email {suffix}", 
+            "phone": f"Phone {suffix}",
+            "dd": f"Day {suffix}", 
+            "mm": f"Month {suffix}", 
+            "yy": f"Year {suffix}"
         }
+        # Special case for Candidate 10
         if i == 10: entry["name"] = "10"
         candidate_map.append(entry)
 
@@ -49,19 +99,28 @@ def process_efa(df, template_path, output_folder):
         writer.append(reader)
         data_map = {}
 
+        # 1. Apply Host Data
+        for field, value in HOST_DATA.items():
+            data_map[field] = value
+
+        # 2. Apply Candidate Data
         for i, (idx, row) in enumerate(batch_df.iterrows()):
             if i >= len(candidate_map): break
             fields = candidate_map[i]
+            
             full_name = clean_name(row.get("AttendeeName", ""))
             dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=True)
 
             data_map[fields["name"]] = full_name
             data_map[fields["addr"]] = str(row.get("Street", ""))
+            data_map[fields["apt"]] = "" # No Apt column in source, leave blank
             data_map[fields["city"]] = str(row.get("City", ""))
             data_map[fields["zip"]] = str(row.get("PostalCode", ""))
             data_map[fields["email"]] = str(row.get("E-mail", ""))
             data_map[fields["phone"]] = str(row.get("AttendeePhone", ""))
-            data_map[fields["dd"]] = dd; data_map[fields["mm"]] = mm; data_map[fields["yy"]] = yy
+            data_map[fields["dd"]] = dd
+            data_map[fields["mm"]] = mm
+            data_map[fields["yy"]] = yy
 
         for page in writer.pages:
             writer.update_page_form_field_values(page, data_map)
@@ -93,13 +152,18 @@ def process_bronze_med(df, template_path, output_folder):
         writer.append(reader)
         data_map = {}
 
+        # 1. Apply Host Data
+        for key, pdf_field in BRONZE_HOST_FIELD_MAP.items():
+            data_map[pdf_field] = BRONZE_HOST_DATA[key]
+
+        # 2. Apply Candidate Data
         for i, (idx, row) in enumerate(batch_df.iterrows()):
             if i >= len(candidate_map): break
             slot = candidate_map[i]
             base, s = slot["base"], slot["s"]
             
             full_name = clean_name(row.get("AttendeeName", ""))
-            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=False) # 2 digit year
+            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=False)
 
             data_map[f"Name{base}{s}"] = full_name
             data_map[f"Address{base}{s}"] = str(row.get("Street", ""))
@@ -107,7 +171,9 @@ def process_bronze_med(df, template_path, output_folder):
             data_map[f"Postal{base}{s}"] = str(row.get("PostalCode", ""))
             data_map[f"Email{base}{s}"] = str(row.get("E-mail", ""))
             data_map[f"Phone{base}{s}"] = str(row.get("AttendeePhone", ""))
-            data_map[f"DOBD{base}{s}"] = dd; data_map[f"DOBM{base}{s}"] = mm; data_map[f"DOBY{base}{s}"] = yy
+            data_map[f"DOBD{base}{s}"] = dd
+            data_map[f"DOBM{base}{s}"] = mm
+            data_map[f"DOBY{base}{s}"] = yy
 
         for page in writer.pages: writer.update_page_form_field_values(page, data_map)
 
@@ -122,7 +188,8 @@ def process_bronze_cross(df, template_path, output_folder):
         {"p": "", "s": ".0"}, {"p": "", "s": ".1.0"}, {"p": "", "s": ".1.1.0"},
         {"p": "", "s": ".1.1.1.0"}, {"p": "", "s": ".1.1.1.1.0"}, {"p": "", "s": ".1.1.1.1.1"},
         {"p": "7", "s": ".0"}, {"p": "8", "s": ".1.0"},
-        {"p": "9", "s": ".1.1.0", "addr_override": ["Address1.1.1.0X", "Address1.1.1", "Address1.1.1.0", "Address1.1.0", "Address1.0", "Address1", "Address1.1", "Text2", "Text16", "Text17"]},
+        # Fixed Candidate 9 Mapping from your script
+        {"p": "9", "s": ".1.1.0", "addr_override": ["9Address1.1.1.0", "Address1.1.1.0X"]},
         {"p": "10", "s": ".1.1.1.0", "name_override": "10"},
         {"p": "11", "s": ".1.1.1.1.0"}, {"p": "12", "s": ".1.1.1.1.1"}, {"p": "13", "s": ".1.1.1.1.1"}
     ]
@@ -138,13 +205,22 @@ def process_bronze_cross(df, template_path, output_folder):
         writer.append(reader)
         data_map = {}
 
+        # 1. Apply Host Data
+        for key, pdf_field in BRONZE_HOST_FIELD_MAP.items():
+            data_map[pdf_field] = BRONZE_HOST_DATA[key]
+
+        # 2. Apply Candidate Data
         for i, (idx, row) in enumerate(batch_df.iterrows()):
             if i >= len(candidate_map): break
             slot = candidate_map[i]
             p, s = slot.get("p", ""), slot.get("s", "")
             prefix = p if p else ""
 
-            f_name = slot.get("name_override", f"{prefix}Name1{s}")
+            # Standard naming pattern
+            f_name = f"{prefix}Name1{s}"
+            if "name_override" in slot:
+                f_name = slot["name_override"]
+
             full_name = clean_name(row.get("AttendeeName", ""))
             dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=False)
 
@@ -153,9 +229,11 @@ def process_bronze_cross(df, template_path, output_folder):
             data_map[f"{prefix}Postal1{s}"] = str(row.get("PostalCode", ""))
             data_map[f"{prefix}Email1{s}"] = str(row.get("E-mail", ""))
             data_map[f"{prefix}Phone1{s}"] = str(row.get("AttendeePhone", ""))
-            data_map[f"{prefix}DOBD1{s}"] = dd; data_map[f"{prefix}DOBM1{s}"] = mm; data_map[f"{prefix}DOBY1{s}"] = yy
+            data_map[f"{prefix}DOBD1{s}"] = dd
+            data_map[f"{prefix}DOBM1{s}"] = mm
+            data_map[f"{prefix}DOBY1{s}"] = yy
 
-            # Handle Address Override (The Shotgun Approach)
+            # Handle Address Override
             addr_val = str(row.get("Street", ""))
             if "addr_override" in slot:
                 overrides = slot["addr_override"]
@@ -173,217 +251,137 @@ def process_bronze_cross(df, template_path, output_folder):
         generated_files.append(out_name)
     return generated_files
 
-# ... (existing imports and functions) ...
-
-# --- BRONZE STAR LOGIC (Based on your provided script) ---
-
+# --- BRONZE STAR LOGIC ---
 def process_bronze_star(df, template_path, output_folder):
-
-    # The exact mapping from your script
-
     candidate_map = [
-
-        # === PAGE 1 (Candidates 1-6) ===
-
         {"type": "explicit", "s": "1"}, 
-
         {"type": "explicit", "s": "2"}, 
-
         {"type": "explicit", "s": "3"}, 
-
         {"type": "explicit", "s": "4"}, 
-
         {"type": "explicit", "s": "5"}, 
-
         {"type": "explicit", "s": "6"}, 
-
-        # === PAGE 2 (Candidates 7-13) ===
-
         {"type": "dot", "s": ".0"},           
-
         {"type": "dot", "s": ".1.0"},         
-
         {"type": "dot", "s": ".1.1.0"},       
-
         {"type": "dot", "s": ".1.1.1.0"},     
-
         {"type": "dot", "s": ".1.1.1.1.0"},   
-
         {"type": "dot", "s": ".1.1.1.1.1.0"}, 
-
         {"type": "dot", "s": ".1.1.1.1.1.1"},
-
     ]
 
     BATCH_SIZE = 13
-
     total_batches = math.ceil(len(df) / BATCH_SIZE)
-
     generated_files = []
 
     for b in range(total_batches):
-
         batch_df = df.iloc[b * BATCH_SIZE : (b + 1) * BATCH_SIZE]
-
         reader = PdfReader(template_path)
-
         writer = PdfWriter()
-
         writer.append(reader)
-
         data_map = {}
 
+        # 1. Apply Host Data
+        for key, pdf_field in BRONZE_HOST_FIELD_MAP.items():
+            data_map[pdf_field] = BRONZE_HOST_DATA[key]
+
+        # 2. Apply Candidate Data
         for i, (idx, row) in enumerate(batch_df.iterrows()):
-
             if i >= len(candidate_map): break
-
             slot = candidate_map[i]
-
             suffix = slot["s"]
 
-            # --- DATA PREP ---
-
             full_name = clean_name(row.get("AttendeeName", ""))
-
-            # Use existing helper to get 2-digit year (YY)
-
             dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=False)
 
-            # --- BUILD FIELD NAMES ---
-
-            # Note: Whether "explicit" (1) or "dot" (.0), the format Name{suffix} works for both
-
-            # e.g., Name1 or Name.0
-
+            # Note: Logic handles both "Name1" and "Name.0" via suffix
             data_map[f"Name{suffix}"] = full_name
-
             data_map[f"Address{suffix}"] = str(row.get("Street", ""))
-
             data_map[f"City{suffix}"] = str(row.get("City", ""))
-
             data_map[f"Postal{suffix}"] = str(row.get("PostalCode", ""))
-
             data_map[f"Email{suffix}"] = str(row.get("E-mail", ""))
-
             data_map[f"Phone{suffix}"] = str(row.get("AttendeePhone", ""))
-
             data_map[f"DOBD{suffix}"] = dd
-
             data_map[f"DOBM{suffix}"] = mm
-
             data_map[f"DOBY{suffix}"] = yy
 
         for page in writer.pages:
-
             writer.update_page_form_field_values(page, data_map)
 
         out_name = os.path.join(output_folder, f"BronzeStar_Batch_{b+1}.pdf")
-
         with open(out_name, "wb") as f: writer.write(f)
-
         generated_files.append(out_name)
-
+    
     return generated_files
 
-    # --- STANDARD FIRST AID LOGIC ---
-
+# --- STANDARD FIRST AID LOGIC ---
 def process_sfa(df, template_path, output_folder):
-
-    # Mapping for Standard First Aid (1-10)
+    # Host Data specific to SFA
+    HOST_DATA = {
+        "Host Name": "City of Markham",
+        "Host Phone": "9054703590 EXT 4342",
+        "Host Address": "8600 McCowan Road",
+        "Host City": "Markham",
+        "Host Province": "ON",
+        "Host Postal Code": "L3P 3M2",
+        "Facility Name": "Centennial C.C."
+    }
 
     candidate_map = []
-
     for i in range(1, 11):
-
         suffix = str(i)
-
         entry = {
-
-            "name": f"NAME {suffix}",
-
-            "addr": f"Address {suffix}",
-
+            "name": f"NAME {suffix}", 
+            "addr": f"Address {suffix}", 
             "apt":  f"Apt# {suffix}",
-
-            "city": f"City {suffix}",
-
-            "zip":  f"Postal Code {suffix}", # Specific to SFA form
-
-            "email": f"Email {suffix}",
-
-            "phone": f"Phone {suffix}",
-
-            "dd": f"Day {suffix}",
-
-            "mm": f"Month {suffix}",
-
+            "city": f"City {suffix}", 
+            "zip":  f"Postal Code {suffix}", 
+            "email": f"Email {suffix}", 
+            "phone": f"Phone {suffix}", 
+            "dd": f"Day {suffix}", 
+            "mm": f"Month {suffix}", 
             "yy": f"Year {suffix}"
-
         }
-
         candidate_map.append(entry)
 
     BATCH_SIZE = 10
-
     total_batches = math.ceil(len(df) / BATCH_SIZE)
-
     generated_files = []
 
     for b in range(total_batches):
-
         batch_df = df.iloc[b * BATCH_SIZE : (b + 1) * BATCH_SIZE]
-
         reader = PdfReader(template_path)
-
         writer = PdfWriter()
-
         writer.append(reader)
-
         data_map = {}
 
+        # 1. Apply Host Data
+        for field, value in HOST_DATA.items():
+            data_map[field] = value
+
+        # 2. Apply Candidate Data
         for i, (idx, row) in enumerate(batch_df.iterrows()):
-
             if i >= len(candidate_map): break
-
             fields = candidate_map[i]
-
+            
             full_name = clean_name(row.get("AttendeeName", ""))
-
-            # SFA typically uses full 4-digit year
-
             dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=True)
 
             data_map[fields["name"]] = full_name
-
             data_map[fields["addr"]] = str(row.get("Street", ""))
-
-            # CSV usually lacks Apt column, leaving blank as per your script
-
             data_map[fields["apt"]] = "" 
-
             data_map[fields["city"]] = str(row.get("City", ""))
-
             data_map[fields["zip"]] = str(row.get("PostalCode", ""))
-
             data_map[fields["email"]] = str(row.get("E-mail", ""))
-
             data_map[fields["phone"]] = str(row.get("AttendeePhone", ""))
-
             data_map[fields["dd"]] = dd
-
             data_map[fields["mm"]] = mm
-
             data_map[fields["yy"]] = yy
 
         for page in writer.pages:
-
             writer.update_page_form_field_values(page, data_map)
 
         out_name = os.path.join(output_folder, f"SFA_Exam_Sheet_{b+1}.pdf")
-
         with open(out_name, "wb") as f: writer.write(f)
-
         generated_files.append(out_name)
-
+    
     return generated_files
- 
