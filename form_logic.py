@@ -26,19 +26,41 @@ def parse_date(raw_dob, use_full_year=True):
 
 # --- EMERGENCY FIRST AID LOGIC ---
 def process_efa(df, template_path, output_folder):
-    # --- CANDIDATE MAPPING GENERATION ---
-    # Based on the field dump: "Name 1", "Name 2"...
-    # except for Candidate 10, whose name field is just "10".
+    # --- CONSTANT DATA (HOST & FACILITY) ---
+    # The dump confirms these are SPLIT fields (Area Code + Number).
+    HOST_DATA = {
+        "Host Name": "City of Markham",
+        "Host Address": "8600 McCowan Road",
+        "Host City": "Markham",
+        "Host Province": "ON",
+        "Host Postal Code": "L3P 3M2",
+        
+        # SPLIT PHONES (Matches your dump exactly)
+        "Host Area Code": "905",
+        "Host Number": "470-3590 EXT 4342",
+        
+        "Facility Name": "Centennial C.C.",
+        "Facility Area Code": "905",
+        "Facility Number": "470-3590 EXT 4342",
+        
+        # SHOTGUN FALLBACKS (In case there are hidden fields)
+        "Host Phone": "905-470-3590",
+        "Facility Phone": "905-470-3590",
+        "Telephone": "905-470-3590",
+        "Phone": "905-470-3590"
+    }
+
+    # --- CANDIDATE MAPPING ---
     candidate_map = []
-    
     # Generate the map for candidates 1 to 10
     for i in range(1, 11):
         suffix = str(i)
         entry = {
             "name": f"Name {suffix}",
             "addr": f"Address {suffix}",
+            "apt":  f"apt {suffix}",      # Lowercase "apt" from dump
             "city": f"City {suffix}",
-            "zip": f"Postal {suffix}",
+            "zip":  f"Postal {suffix}",
             "email": f"Email {suffix}",
             "phone": f"Phone {suffix}",
             "dd": f"Day {suffix}",
@@ -63,20 +85,20 @@ def process_efa(df, template_path, output_folder):
         writer.append(reader)
         data_map = {}
 
+        # --- 1. APPLY HOST & FACILITY DATA ---
+        for field, value in HOST_DATA.items():
+            data_map[field] = value
+
+        # --- 2. APPLY CANDIDATE DATA ---
         for i, (idx, row) in enumerate(batch_df.iterrows()):
             if i >= len(candidate_map): break
-            
-            # Get the field names for this slot
             fields = candidate_map[i]
             
-            # 1. Clean Name
             full_name = clean_name(row.get("AttendeeName", ""))
             
-            # 2. Parse Date (True = 4 digit year for EFA)
-            # Using the shared utility function parse_date
-            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=True)
+            # Using shared parse_date utility (False = 2 digit year based on your snippet)
+            dd, mm, yy = parse_date(row.get("DateOfBirth", ""), use_full_year=False)
 
-            # 3. Map Data
             data_map[fields["name"]] = full_name
             data_map[fields["addr"]] = str(row.get("Street", ""))
             data_map[fields["city"]] = str(row.get("City", ""))
