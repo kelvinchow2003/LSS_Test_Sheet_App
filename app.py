@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import zipfile
 import shutil
-from form_logic import process_efa, process_bronze_med, process_bronze_cross, process_bronze_star, process_sfa
+from form_logic import process_efa, process_bronze_med, process_bronze_cross, process_bronze_star, process_sfa, process_airway_management
 
 app = Flask(__name__)
 
@@ -34,6 +34,10 @@ FORM_CONFIG = {
     "sfa": {
         "filename": "95on_sfa_test_sheet-20231121-fillable.pdf",
         "func": process_sfa
+    },
+    "airway_management": {
+        "filename": "95airwaymanagement2022-fillable.pdf",
+        "func": process_airway_management
     }
 }
 
