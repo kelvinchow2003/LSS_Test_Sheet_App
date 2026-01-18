@@ -694,3 +694,131 @@ def process_airway_management(df, template_path, output_folder):
         generated_files.append(out_name)
     
     return generated_files
+
+
+
+# --- LEADERSHIP MASTERSHEET LOGIC ---
+def process_leadership_mastersheet(df, template_path, output_folder):
+    # --- HOST DATA ---
+    HOST_DATA = {
+        "Host Name": "City of Markham",
+        "Host Area": "905",
+        "Host Phone": "4703590 EXT 4342",
+        "Host Street": "8600 McCowan Road",
+        "Host City": "Markham",
+        "Host Province": "ON",
+        "Host Postal": "L3P 3M2",
+        "Host Facility": "Centennial C.C.",
+        "Host Facility Area": "905",
+        "Host Facility Phone": "4703590 EXT 4342",
+        "Exam Fees Attached": "/Yes"
+    }
+
+    total_candidates = len(df)
+    generated_files = []
+
+    # Helper to get slot data
+    def get_slot_data(row, field_id, visible_number):
+        p = str(field_id)      # The PDF field ID (4, 5, 6...)
+        num_str = str(visible_number) # The text to type (10, 11, 12...)
+        
+        full_name = clean_name(row.get("AttendeeName", ""))
+        street = str(row.get("Street", ""))
+        city = str(row.get("City", ""))
+        zip_code = str(row.get("PostalCode", ""))
+        full_address = f"{street}, {city} {zip_code}".strip(", ")
+
+        # DOB Formatting: YY/MM/DD
+        raw_dob = row.get("DateOfBirth", "")
+        formatted_dob = ""
+        if pd.notna(raw_dob):
+            try:
+                dt = pd.to_datetime(raw_dob, dayfirst=True)
+                formatted_dob = dt.strftime("%y/%m/%d")
+            except: pass
+
+        data = {
+            f"{p}.1": full_name,
+            f"{p}.2": full_address,
+            f"{p}.3": str(row.get("AttendeePhone", "")),
+            f"{p}.4": str(row.get("E-mail", "")),
+            f"{p}.5": formatted_dob
+        }
+
+        # Write the GLOBAL candidate number into the box (e.g. '10', '11')
+        # Only for slots > 3 (The back page) or if explicitly needed
+        if int(field_id) > 3:
+            data[f"{p}.0"] = num_str
+
+        return data
+
+    # Helper to save file
+    def _finalize_and_save(writer, reader, data_map, filename):
+        for page in writer.pages:
+            writer.update_page_form_field_values(page, data_map)
+
+        # Force Fonts & Layers (Critical for new PDF forms)
+        if "/AcroForm" not in writer.root_object:
+            writer.root_object.update({NameObject("/AcroForm"): DictionaryObject()})
+        writer.root_object["/AcroForm"][NameObject("/NeedAppearances")] = BooleanObject(True)
+
+        if "/OCProperties" in reader.root_object:
+            writer.root_object[NameObject("/OCProperties")] = \
+                reader.root_object["/OCProperties"].clone(writer)
+
+        out_path = os.path.join(output_folder, filename)
+        with open(out_path, "wb") as f:
+            writer.write(f)
+        generated_files.append(out_path)
+
+    # --- 1. MASTER FILE (Candidates 1-9) ---
+    batch1 = df.iloc[0:9]
+    if not batch1.empty:
+        reader = PdfReader(template_path)
+        writer = PdfWriter()
+        writer.append(reader) 
+
+        data_map = HOST_DATA.copy()
+        data_map["Total Enrolled"] = str(total_candidates)
+
+        for i, (idx, row) in enumerate(batch1.iterrows()):
+            current_num = i + 1  # 1, 2, 3... 9
+            # For the Master sheet, Field ID and Candidate Number are the same
+            data_map.update(get_slot_data(row, field_id=current_num, visible_number=current_num))
+
+        _finalize_and_save(writer, reader, data_map, "Leadership_Master_1.pdf")
+
+    # --- 2. CONTINUATION FILES (Candidates 10+) ---
+    start_index = 9
+    batch_counter = 2
+    
+    while start_index < total_candidates:
+        reader = PdfReader(template_path)
+        writer = PdfWriter()
+        
+        # Copy PDF and remove Page 1 (Front page)
+        writer.append(reader)
+        if len(writer.pages) > 0:
+            del writer.pages[0]
+
+        batch_next = df.iloc[start_index : start_index + 6]
+        data_map = HOST_DATA.copy()
+        data_map["Total Enrolled"] = str(total_candidates)
+
+        # Loop through the batch (up to 6 people)
+        for i, (idx, row) in enumerate(batch_next.iterrows()):
+            # The PDF Field IDs are HARDCODED to 4, 5, 6, 7, 8, 9 on the back page
+            pdf_field_id = i + 4 
+            if pdf_field_id > 9: break 
+            
+            # The Visible Number continues counting (10, 11, 12...)
+            actual_candidate_num = (start_index + 1) + i
+            
+            data_map.update(get_slot_data(row, field_id=pdf_field_id, visible_number=actual_candidate_num))
+
+        _finalize_and_save(writer, reader, data_map, f"Leadership_Continuation_{batch_counter}.pdf")
+        
+        start_index += 6
+        batch_counter += 1
+
+    return generated_files
