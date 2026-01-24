@@ -695,7 +695,148 @@ def process_airway_management(df, template_path, output_folder):
     
     return generated_files
 
+# --- NATIONAL LIFEGUARD POOL LOGIC ---
+def process_national_lifeguard(df, template_path, output_folder):
+    # --- HOST DATA ---
+    HOST_DATA = {
+        "Host Name": "City of Markham",
+        "Host Area": "905",
+        "Host Phone": "4703590 EXT 4342",
+        "Host Street": "8600 McCowan Road",
+        "Host City": "Markham",
+        "Host Prov": "ON",
+        "Host Postal": "L3P 3M2",
+        "Exam Facility": "Centennial C.C.",
+        "Exam Area": "905",
+        "Exam Phone": "4703590 EXT 4342",
+    }
+    
+    generated_files = []
+    
+    # --- HELPER: MAP ROW TO SLOT ---
+    def get_slot_data(row, field_id, visible_number):
+        p = str(field_id)
+        
+        # 1. Name Splitting Logic
+        full_name = str(row.get("AttendeeName", "")).strip()
+        last, first = "", ""
+        
+        if "," in full_name:
+            parts = full_name.split(",")
+            if len(parts) >= 2:
+                last = parts[0].strip()
+                first = parts[1].strip()
+        elif " " in full_name:
+            parts = full_name.split(" ")
+            last = parts[-1].strip()
+            first = " ".join(parts[:-1]).strip()
+        else:
+            last = full_name
+            first = "-" 
 
+        # 2. Address & Contact Parsing
+        street = str(row.get("Street", ""))
+        city = str(row.get("City", ""))
+        prov = str(row.get("Province", "ON"))
+        postal = str(row.get("PostalCode", ""))
+        email = str(row.get("E-mail", ""))
+        phone = str(row.get("AttendeePhone", ""))
+        
+        # 3. DOB Formatting
+        raw_dob = row.get("DateOfBirth", "")
+        dd, mm, yy = "", "", ""
+        if pd.notna(raw_dob):
+            try:
+                dt = pd.to_datetime(raw_dob, dayfirst=True)
+                dd = str(dt.day).zfill(2)
+                mm = str(dt.month).zfill(2)
+                yy = str(dt.year)
+            except: pass
+
+        # 4. Final Mapping Dictionary
+        data = {
+            f"{p}.1": last,      # Last Name
+            f"{p}.4": first,     # First Name
+            f"{p}.5": street,    # Address
+            f"{p}.6": city,      # City
+            f"{p}.7": prov,      # Province
+            f"{p}.8": postal,    # Postal Code
+            f"{p}.9": email,     # Email
+            f"{p}.10": phone,    # Phone
+            f"{p}.11": yy,       # Year
+            f"{p}.12": mm,       # Month
+            f"{p}.13": dd        # Day
+        }
+
+        # 5. Handle Continuation Numbering (Write '9', '10' etc. in corner box)
+        if visible_number > 8:
+            data[f"{p}X"] = str(visible_number)
+
+        return data
+
+    # --- SAVE FUNCTION ---
+    def _finalize_and_save(writer, reader, data_map, index, suffix):
+        for page in writer.pages:
+            writer.update_page_form_field_values(page, data_map)
+
+        # Fix: Force Adobe/Chrome to re-render text
+        if "/AcroForm" not in writer.root_object:
+            writer.root_object.update({NameObject("/AcroForm"): DictionaryObject()})
+        writer.root_object["/AcroForm"][NameObject("/NeedAppearances")] = BooleanObject(True)
+
+        # Fix: Clone Layer Settings
+        if "/OCProperties" in reader.root_object:
+            writer.root_object[NameObject("/OCProperties")] = \
+                reader.root_object["/OCProperties"].clone(writer)
+
+        out_name = os.path.join(output_folder, f"NL_Pool_{index}_{suffix}.pdf")
+        with open(out_name, "wb") as f:
+            writer.write(f)
+        generated_files.append(out_name)
+
+    # --- MAIN PROCESSING LOGIC ---
+    total_candidates = len(df)
+    
+    # 1. Process Master Sheet (First 8 Candidates)
+    batch1 = df.iloc[0:8]
+    if not batch1.empty:
+        reader = PdfReader(template_path)
+        writer = PdfWriter()
+        writer.append(reader) 
+
+        data_map = HOST_DATA.copy()
+        
+        for i, (idx, row) in enumerate(batch1.iterrows()):
+            current_num = i + 1  # Slots 1-8
+            data_map.update(get_slot_data(row, field_id=current_num, visible_number=current_num))
+
+        _finalize_and_save(writer, reader, data_map, 1, "Master")
+
+    # 2. Process Continuation Sheets (Remaining Candidates in groups of 8)
+    start_index = 8
+    batch_counter = 2
+    
+    while start_index < total_candidates:
+        end_index = start_index + 8
+        batch_next = df.iloc[start_index:end_index]
+        
+        reader = PdfReader(template_path)
+        writer = PdfWriter()
+        writer.append(reader) # Duplicate full form
+        
+        data_map = HOST_DATA.copy()
+
+        for i, (idx, row) in enumerate(batch_next.iterrows()):
+            slot_id = i + 1               # Reuse PDF slots 1-8
+            real_number = (start_index + 1) + i # Actual Candidate # (e.g. 9, 10...)
+            data_map.update(get_slot_data(row, field_id=slot_id, visible_number=real_number))
+        
+        _finalize_and_save(writer, reader, data_map, batch_counter, "Continuation")
+        
+        start_index += 8
+        batch_counter += 1
+
+    return generated_files
 
 # --- LEADERSHIP MASTERSHEET LOGIC ---
 def process_leadership_mastersheet(df, template_path, output_folder):
