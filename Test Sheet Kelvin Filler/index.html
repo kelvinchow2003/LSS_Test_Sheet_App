@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automator | Kelvin Chow</title>
+
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%2310b981'/><text x='50%' y='50%' dominant-baseline='central' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='350' fill='white'>K</text></svg>">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
+    <style>
+        :root {
+            --bg-start: #111827;
+            --bg-end: #000000;
+            --overlay-start: rgba(6, 78, 59, 0.2);
+            --overlay-end: rgba(22, 78, 99, 0.2);
+            --accent-primary: #10b981;
+            --glass-bg: rgba(17, 24, 39, 0.6);
+            --glass-border: rgba(55, 65, 81, 0.3);
+            --text-white: #ffffff;
+            --text-muted: #9ca3af;
+        }
+
+        body {
+            background: linear-gradient(to bottom right, var(--bg-start), var(--bg-end));
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-white);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .ambient-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom right, var(--overlay-start), var(--overlay-end));
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+            100% { transform: translateY(0px); }
+        }
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--glass-border);
+            border-radius: 0.75rem;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .glass-card:hover {
+            box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.2);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        h2 { font-weight: 900; letter-spacing: -0.025em; margin-bottom: 0.5rem; color: white; }
+        .highlight-text { color: var(--accent-primary); }
+        p.desc { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; }
+
+        .form-label { color: var(--text-white); font-size: 0.9rem; font-weight: 600; display: block; text-align: left; margin-bottom: 0.5rem; }
+
+        .custom-input {
+            background: rgba(17, 24, 39, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.4);
+            color: white;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            outline: none;
+            font-family: 'Outfit', sans-serif;
+        }
+        .custom-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2); }
+
+        input[type="file"]::file-selector-button {
+            background: rgba(255, 255, 255, 0.1); border: none; color: white; padding: 5px 12px;
+            margin-right: 12px; border-radius: 4px; cursor: pointer; transition: 0.2s;
+        }
+        input[type="file"]::file-selector-button:hover { background: rgba(255, 255, 255, 0.2); }
+
+        select.custom-input {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em;
+        }
+        option { background-color: #111827; color: white; }
+
+        .btn-portfolio {
+            background: rgba(5, 150, 105, 0.8); border: 1px solid rgba(16, 185, 129, 0.5); color: white;
+            padding: 0.75rem 1.5rem; border-radius: 9999px; width: 100%; font-weight: 600; font-size: 1rem;
+            margin-top: 1.5rem; transition: all 0.3s; backdrop-filter: blur(4px);
+            box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.5);
+        }
+        .btn-portfolio:hover { background: rgba(16, 185, 129, 0.9); transform: scale(1.02); }
+        .btn-portfolio:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+
+        .footer-link { display: block; margin-top: 2rem; font-size: 0.85rem; color: var(--text-muted); text-decoration: none; transition: 0.3s; }
+        .footer-link:hover { color: var(--accent-primary); }
+
+        .spinner { display: none; width: 1.2rem; height: 1.2rem; border: 2px solid rgba(255,255,255,0.3); border-top: 2px solid white; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading .spinner { display: inline-block; }
+
+        .privacy-badge {
+            margin-top: 1.5rem;
+            display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+            font-size: 0.75rem; color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.03); padding: 0.5rem 1rem; border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.05); transition: 0.3s;
+        }
+        .privacy-badge:hover { color: var(--accent-primary); border-color: rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.05); }
+
+        .info-btn {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--text-muted); width: 32px; height: 32px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;
+        }
+        .info-btn:hover { background: var(--accent-primary); color: white; border-color: var(--accent-primary); }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px);
+            z-index: 1000; display: none; align-items: center; justify-content: center;
+            opacity: 0; transition: opacity 0.3s ease;
+        }
+        .modal-overlay.active { display: flex; opacity: 1; }
+
+        .modal-glass {
+            background: #1f2937;
+            border: 1px solid var(--glass-border); border-radius: 1rem; padding: 2rem;
+            width: 90%; max-width: 500px; text-align: left; position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transform: scale(0.95); transition: transform 0.3s ease;
+        }
+        .modal-overlay.active .modal-glass { transform: scale(1); }
+
+        .modal-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; color: white; display: flex; align-items: center; }
+        .modal-step { margin-bottom: 1rem; color: #d1d5db; font-size: 0.95rem; }
+        .modal-step strong { color: var(--accent-primary); display: block; margin-bottom: 0.25rem; }
+
+        .close-modal {
+            position: absolute; top: 1.5rem; right: 1.5rem; cursor: pointer; color: var(--text-muted); transition: 0.2s;
+        }
+        .close-modal:hover { color: white; }
+
+        .template-hint {
+            font-size: 0.8rem; color: var(--accent-primary); text-align: left; margin-top: 0.35rem;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .template-hint.visible { opacity: 1; }
+
+        .local-badge {
+            margin-top: 0.75rem;
+            display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+            font-size: 0.7rem; color: rgba(255, 255, 255, 0.35);
+        }
+
+        #resultsPanel {
+            display: none;
+            margin-top: 1.5rem;
+            text-align: left;
+        }
+        #resultsPanel.visible { display: block; }
+        #resultsPanel h5 {
+            color: var(--accent-primary);
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            font-size: 1rem;
+        }
+        .pdf-link-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .pdf-link-list li {
+            margin-bottom: 0.5rem;
+        }
+        .pdf-link-list a {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            border-radius: 0.5rem;
+            color: white;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .pdf-link-list a:hover {
+            background: rgba(16, 185, 129, 0.25);
+            border-color: var(--accent-primary);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ambient-overlay"></div>
+
+    <div class="container d-flex justify-content-center">
+        <div class="glass-card animate-float">
+
+            <button class="info-btn" id="infoBtn" title="How to use">
+                <i data-lucide="help-circle" width="18"></i>
+            </button>
+
+            <h2>Test Sheet <span class="highlight-text">Automator</span></h2>
+            <p class="desc">Took Someone Long Enough...</p>
+
+            <form id="uploadForm">
+                <div class="mb-4">
+                    <label class="form-label">Upload File (CSV)</label>
+                    <input type="file" class="custom-input" id="csvFile" accept=".csv" required>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label">Select Course</label>
+                    <select class="custom-input" id="formType" required>
+                        <option value="" selected disabled>Choose Test Sheet...</option>
+                        <option value="efa">Emergency First Aid (2014)</option>
+                        <option value="bronze_med">Bronze Medallion (2020)</option>
+                        <option value="bronze_cross">Bronze Cross (2020)</option>
+                        <option value="bronze_star">Bronze Star (2020)</option>
+                        <option value="sfa">Standard First Aid (2023)</option>
+                        <option value="airway_management">Airway Management (2022)</option>
+                        <option value="national_lifeguard">National Lifeguard - Pool (2022)</option>
+                        <option value="leadership_mastersheet">Leadership Mastersheet (2024)</option>
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label">Select Template PDF</label>
+                    <input type="file" class="custom-input" id="pdfTemplate" accept=".pdf" required>
+                    <div class="template-hint" id="templateHint"></div>
+                </div>
+
+                <button type="submit" class="btn-portfolio" id="submitBtn">
+                    <div class="spinner"></div>
+                    <span id="btnText">Generate PDFs</span>
+                </button>
+            </form>
+
+            <div id="resultsPanel">
+                <h5>Generated PDFs — click to open:</h5>
+                <ul class="pdf-link-list" id="pdfLinkList"></ul>
+            </div>
+
+            <div class="privacy-badge">
+                <i data-lucide="shield-check" width="14"></i>
+                <span>100% Local. Data never leaves your machine.</span>
+            </div>
+
+            <div class="local-badge">
+                <i data-lucide="monitor" width="12"></i>
+                <span>Running locally &mdash; no server required</span>
+            </div>
+
+            <a href="https://kelvinchow2003.github.io/K/" class="footer-link">
+                &larr; Developed By Kelvin Chow
+            </a>
+        </div>
+    </div>
+
+    <!-- Instructions Modal -->
+    <div class="modal-overlay" id="instructionsModal">
+        <div class="modal-glass">
+            <button class="close-modal" id="closeModal">
+                <i data-lucide="x" width="24"></i>
+            </button>
+
+            <div class="modal-title">
+                <i data-lucide="file-text" width="24" class="me-2 text-success"></i>
+                Instructions
+            </div>
+
+            <div class="modal-step">
+                <strong>1. Prepare your CSV</strong>
+                Your file <u>must</u> include these required headers (additional columns are allowed): <br>
+                <code style="color: #6ee7b7;">AttendeeName, Street, City, PostalCode, E-mail, AttendeePhone, DateOfBirth</code>
+            </div>
+
+            <div class="modal-step">
+                <strong>2. Upload & Select</strong>
+                Upload your CSV file, select the correct Lifesaving Society form from the dropdown, then select the matching template PDF from the <code style="color: #6ee7b7;">templates_pdf</code> folder.
+            </div>
+
+            <div class="modal-step">
+                <strong>3. Generate & Download</strong>
+                Click "Generate PDFs". A ZIP file containing all filled test sheets will download automatically.
+            </div>
+
+            <div class="modal-step" style="margin-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+                <strong style="color: #9ca3af; font-size: 0.9rem;">Privacy Notice</strong>
+                <span style="font-size: 0.85rem; color: #6b7280;">
+                    This tool runs entirely in your browser. No data is uploaded or sent anywhere. All processing happens locally on your machine.
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // =====================================================================
+    // Initialize Icons
+    // =====================================================================
+    lucide.createIcons();
+
+    // =====================================================================
+    // TEMPLATE FILENAME HINTS
+    // =====================================================================
+    const TEMPLATE_FILENAMES = {
+        "efa": "95efa_on2014.pdf",
+        "bronze_med": "95tsbronzemedallion2020_fillable.pdf",
+        "bronze_cross": "95tsbronzecross2020_fillable.pdf",
+        "bronze_star": "95tsbronzestar2020_fillable.pdf",
+        "sfa": "95on_sfa_test_sheet-20231121-fillable.pdf",
+        "airway_management": "95airwaymanagement2022-fillable.pdf",
+        "national_lifeguard": "95nlpool 2022_tsfillable 20250819 x.pdf",
+        "leadership_mastersheet": "leadershipmastersheet_on_20250219_fillable.pdf"
+    };
+
+    // Show hint when form type is selected
+    const formTypeSelect = document.getElementById('formType');
+    const templateHint = document.getElementById('templateHint');
+
+    formTypeSelect.addEventListener('change', () => {
+        const filename = TEMPLATE_FILENAMES[formTypeSelect.value];
+        if (filename) {
+            templateHint.textContent = `Select: templates_pdf/${filename}`;
+            templateHint.classList.add('visible');
+        } else {
+            templateHint.classList.remove('visible');
+        }
+    });
+
+    // =====================================================================
+    // MODAL LOGIC
+    // =====================================================================
+    const infoBtn = document.getElementById('infoBtn');
+    const modal = document.getElementById('instructionsModal');
+    const closeModalBtn = document.getElementById('closeModal');
+
+    infoBtn.addEventListener('click', () => modal.classList.add('active'));
+    closeModalBtn.addEventListener('click', () => modal.classList.remove('active'));
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('active');
+    });
+
+    // =====================================================================
+    // UTILITY FUNCTIONS
+    // =====================================================================
+    function cleanName(rawName) {
+        if (!rawName || rawName.trim() === '') return '';
+        rawName = String(rawName);
+        if (rawName.includes(',')) {
+            const parts = rawName.split(',');
+            if (parts.length >= 2) {
+                return `${parts[1].trim()} ${parts[0].trim()}`;
+            }
+        }
+        return rawName;
+    }
+
+    function parseDate(rawDob, useFullYear = true) {
+        if (!rawDob || String(rawDob).trim() === '') return { dd: '', mm: '', yy: '' };
+
+        const raw = String(rawDob).trim();
+        let dt = null;
+
+        // Try common date formats
+        // DD/MM/YYYY or DD-MM-YYYY (dayfirst)
+        const slashParts = raw.split(/[\/\-\.]/);
+        if (slashParts.length === 3) {
+            const a = parseInt(slashParts[0], 10);
+            const b = parseInt(slashParts[1], 10);
+            let c = parseInt(slashParts[2], 10);
+
+            if (a > 31) {
+                // YYYY-MM-DD
+                dt = new Date(a, b - 1, c);
+            } else if (c > 31 || slashParts[2].length === 4) {
+                // DD/MM/YYYY (dayfirst=True like Python)
+                dt = new Date(c, b - 1, a);
+            } else {
+                // DD/MM/YY
+                if (c < 100) c += 2000;
+                dt = new Date(c, b - 1, a);
+            }
+        }
+
+        if (!dt || isNaN(dt.getTime())) {
+            // Fallback: let JS parse it
+            dt = new Date(raw);
+        }
+
+        if (!dt || isNaN(dt.getTime())) return { dd: '', mm: '', yy: '' };
+
+        return {
+            dd: String(dt.getDate()).padStart(2, '0'),
+            mm: String(dt.getMonth() + 1).padStart(2, '0'),
+            yy: useFullYear ? String(dt.getFullYear()) : String(dt.getFullYear()).slice(-2)
+        };
+    }
+
+    function setField(form, name, value) {
+        try {
+            const field = form.getTextField(name);
+            field.setText(String(value || ''));
+        } catch (e) {
+            // Field not found or wrong type - silently skip
+        }
+    }
+
+    function setCheckbox(form, name, check) {
+        try {
+            const field = form.getCheckBox(name);
+            if (check) field.check();
+            else field.uncheck();
+        } catch (e) {
+            // Not a checkbox or not found
+        }
+    }
+
+    // =====================================================================
+    // PROCESSOR: EMERGENCY FIRST AID (EFA)
+    // =====================================================================
+    async function processEfa(rows, templateBytes) {
+        const HOST_DATA = {
+            "Host Name": "City of Markham",
+            "Host Address": "8600 McCowan Road",
+            "Host City": "Markham",
+            "Host Province": "ON",
+            "Host Postal Code": "L3P 3M2",
+            "Host Area Code": "905",
+            "Host Number": "470-3590 EXT 4342",
+            "Facility Name": "Centennial C.C.",
+            "Facility Area Code": "905",
+            "Facility Number": "470-3590 EXT 4342",
+            "Host Phone": "905-470-3590",
+            "Facility Phone": "905-470-3590",
+            "Telephone": "905-470-3590",
+            "Phone": "905-470-3590"
+        };
+
+        const candidateMap = [];
+        for (let i = 1; i <= 10; i++) {
+            const s = String(i);
+            const entry = {
+                name: i === 10 ? "10" : `Name ${s}`,
+                addr: `Address ${s}`,
+                apt: `apt ${s}`,
+                city: `City ${s}`,
+                zip: `Postal ${s}`,
+                email: `Email ${s}`,
+                phone: `Phone ${s}`,
+                dd: `Day ${s}`,
+                mm: `Month ${s}`,
+                yy: `Year ${s}`
+            };
+            candidateMap.push(entry);
+        }
+
+        const BATCH_SIZE = 10;
+        const totalBatches = Math.ceil(rows.length / BATCH_SIZE);
+        const results = [];
+
+        for (let b = 0; b < totalBatches; b++) {
+            const batch = rows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const form = pdfDoc.getForm();
+
+            // Apply host data
+            for (const [field, value] of Object.entries(HOST_DATA)) {
+                setField(form, field, value);
+            }
+
+            // Apply candidate data
+            for (let i = 0; i < batch.length && i < candidateMap.length; i++) {
+                const row = batch[i];
+                const fields = candidateMap[i];
+                const fullName = cleanName(row['AttendeeName'] || '');
+                const { dd, mm, yy } = parseDate(row['DateOfBirth'], true);
+
+                setField(form, fields.name, fullName);
+                setField(form, fields.addr, row['Street'] || '');
+                setField(form, fields.apt, '');
+                setField(form, fields.city, row['City'] || '');
+                setField(form, fields.zip, row['PostalCode'] || '');
+                setField(form, fields.email, row['E-mail'] || '');
+                setField(form, fields.phone, row['AttendeePhone'] || '');
+                setField(form, fields.dd, dd);
+                setField(form, fields.mm, mm);
+                setField(form, fields.yy, yy);
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `EFA_Test_Sheet_${b + 1}.pdf`, bytes: pdfBytes });
+        }
+        return results;
+    }
+
+    // =====================================================================
+    // PROCESSOR: BRONZE MEDALLION
+    // =====================================================================
+    async function processBronzeMed(rows, templateBytes) {
+        const HOST_DATA = {
+            "Text19": "City of Markham",
+            "Text20": "905",
+            "Text21": "4703590 EXT 4342",
+            "Text22": "8600 McCowan Road",
+            "Text23": "Markham",
+            "Text24": "ON",
+            "Text25": "L3P 3M2",
+            "Text29": "Centennial C.C.",
+            "Text30": "905",
+            "Text31": "4703590 EXT 4342"
+        };
+
+        const candidateMap = [
+            { base: "1", s: ".0" },
+            { base: "1", s: ".1.0" },
+            { base: "1", s: ".1.1.0" },
+            { base: "1", s: ".1.1.1.0" },
+            { base: "1", s: ".1.1.1.1.0" },
+            { base: "1", s: ".1.1.1.1.1" },
+            { base: "", s: ".0.0" },
+            { base: "", s: ".0.1.0" },
+            { base: "", s: ".0.1.1.0" },
+            { base: "", s: ".0.1.1.1.0" },
+            { base: "", s: ".0.1.1.1.1.0" },
+            { base: "", s: ".0.1.1.1.1.1.0" },
+            { base: "", s: ".0.1.1.1.1.1.1" }
+        ];
+
+        const BATCH_SIZE = 13;
+        const totalBatches = Math.ceil(rows.length / BATCH_SIZE);
+        const results = [];
+
+        for (let b = 0; b < totalBatches; b++) {
+            const batch = rows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const form = pdfDoc.getForm();
+
+            for (const [field, value] of Object.entries(HOST_DATA)) {
+                setField(form, field, value);
+            }
+
+            for (let i = 0; i < batch.length && i < candidateMap.length; i++) {
+                const row = batch[i];
+                const slot = candidateMap[i];
+                const bv = slot.base;
+                const sv = slot.s;
+
+                const fullName = cleanName(row['AttendeeName'] || '');
+                const { dd, mm, yy } = parseDate(row['DateOfBirth'], false);
+
+                setField(form, `Name${bv}${sv}`, fullName);
+                setField(form, `Address${bv}${sv}`, row['Street'] || '');
+                setField(form, `City${bv}${sv}`, row['City'] || '');
+                setField(form, `Postal${bv}${sv}`, row['PostalCode'] || '');
+                setField(form, `Email${bv}${sv}`, row['E-mail'] || '');
+                setField(form, `Phone${bv}${sv}`, row['AttendeePhone'] || '');
+                setField(form, `DOBD${bv}${sv}`, dd);
+                setField(form, `DOBM${bv}${sv}`, mm);
+                setField(form, `DOBY${bv}${sv}`, yy);
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `BronzeMed_Batch_${b + 1}.pdf`, bytes: pdfBytes });
+        }
+        return results;
+    }
+
+    // =====================================================================
+    // PROCESSOR: BRONZE CROSS
+    // =====================================================================
+    async function processBronzeCross(rows, templateBytes) {
+        const HOST_DATA = {
+            "Text19": "City of Markham",
+            "Text20": "905",
+            "Text21": "4703590 EXT 4342",
+            "Text22": "8600 McCowan Road",
+            "Text23": "Markham",
+            "Text24": "ON",
+            "Text25": "L3P 3M2",
+            "Text29": "Centennial C.C.",
+            "Text30": "905",
+            "Text31": "4703590 EXT 4342"
+        };
+
+        const candidateMap = [
+            { p: "", s: ".0" },
+            { p: "", s: ".1.0" },
+            { p: "", s: ".1.1.0" },
+            { p: "", s: ".1.1.1.0" },
+            { p: "", s: ".1.1.1.1.0" },
+            { p: "", s: ".1.1.1.1.1" },
+            { p: "7", s: ".0" },
+            { p: "8", s: ".1.0" },
+            { p: "9", s: ".1.1.0", addrOverride: ["9Address1.1.1.0", "Address1.1.1.0X"] },
+            { p: "10", s: ".1.1.1.0", nameOverride: "10" },
+            { p: "11", s: ".1.1.1.1.0" },
+            { p: "12", s: ".1.1.1.1.1" },
+            { p: "13", s: ".1.1.1.1.1" }
+        ];
+
+        const BATCH_SIZE = 13;
+        const totalBatches = Math.ceil(rows.length / BATCH_SIZE);
+        const results = [];
+
+        for (let b = 0; b < totalBatches; b++) {
+            const batch = rows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const form = pdfDoc.getForm();
+
+            for (const [field, value] of Object.entries(HOST_DATA)) {
+                setField(form, field, value);
+            }
+
+            for (let i = 0; i < batch.length && i < candidateMap.length; i++) {
+                const row = batch[i];
+                const slot = candidateMap[i];
+                const p = slot.p || '';
+                const s = slot.s;
+
+                const fName = slot.nameOverride || `${p}Name1${s}`;
+                const fAddr = `${p}Address1${s}`;
+                const fCity = `${p}City1${s}`;
+                const fZip = `${p}Postal1${s}`;
+                const fEmail = `${p}Email1${s}`;
+                const fPhone = `${p}Phone1${s}`;
+                const fDd = `${p}DOBD1${s}`;
+                const fMm = `${p}DOBM1${s}`;
+                const fYy = `${p}DOBY1${s}`;
+
+                const fullName = cleanName(row['AttendeeName'] || '');
+                const addressVal = row['Street'] || '';
+                const { dd, mm, yy } = parseDate(row['DateOfBirth'], false);
+
+                setField(form, fName, fullName);
+                setField(form, fCity, row['City'] || '');
+                setField(form, fZip, row['PostalCode'] || '');
+                setField(form, fEmail, row['E-mail'] || '');
+                setField(form, fPhone, row['AttendeePhone'] || '');
+                setField(form, fDd, dd);
+                setField(form, fMm, mm);
+                setField(form, fYy, yy);
+
+                // Address handling
+                if (slot.addrOverride) {
+                    for (const field of slot.addrOverride) {
+                        setField(form, field, addressVal);
+                    }
+                } else {
+                    setField(form, fAddr, addressVal);
+                }
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `BronzeCross_Batch_${b + 1}.pdf`, bytes: pdfBytes });
+        }
+        return results;
+    }
+
+    // =====================================================================
+    // PROCESSOR: BRONZE STAR
+    // =====================================================================
+    async function processBronzeStar(rows, templateBytes) {
+        const HOST_DATA = {
+            "Text19": "City of Markham",
+            "Text20": "905",
+            "Text21": "4703590 EXT 4342",
+            "Text22": "8600 McCowan Road",
+            "Text23": "Markham",
+            "Text24": "ON",
+            "Text25": "L3P 3M2",
+            "Text29": "Centennial C.C.",
+            "Text30": "905",
+            "Text31": "4703590 EXT 4342"
+        };
+
+        const candidateMap = [
+            { s: "1" }, { s: "2" }, { s: "3" }, { s: "4" }, { s: "5" }, { s: "6" },
+            { s: ".0" }, { s: ".1.0" }, { s: ".1.1.0" }, { s: ".1.1.1.0" },
+            { s: ".1.1.1.1.0" }, { s: ".1.1.1.1.1.0" }, { s: ".1.1.1.1.1.1" }
+        ];
+
+        const BATCH_SIZE = 13;
+        const totalBatches = Math.ceil(rows.length / BATCH_SIZE);
+        const results = [];
+
+        for (let b = 0; b < totalBatches; b++) {
+            const batch = rows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const form = pdfDoc.getForm();
+
+            for (const [field, value] of Object.entries(HOST_DATA)) {
+                setField(form, field, value);
+            }
+
+            for (let i = 0; i < batch.length && i < candidateMap.length; i++) {
+                const row = batch[i];
+                const s = candidateMap[i].s;
+
+                const fullName = cleanName(row['AttendeeName'] || '');
+                const { dd, mm, yy } = parseDate(row['DateOfBirth'], false);
+
+                setField(form, `Name${s}`, fullName);
+                setField(form, `Address${s}`, row['Street'] || '');
+                setField(form, `City${s}`, row['City'] || '');
+                setField(form, `Postal${s}`, row['PostalCode'] || '');
+                setField(form, `Email${s}`, row['E-mail'] || '');
+                setField(form, `Phone${s}`, row['AttendeePhone'] || '');
+                setField(form, `DOBD${s}`, dd);
+                setField(form, `DOBM${s}`, mm);
+                setField(form, `DOBY${s}`, yy);
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `BronzeStar_Batch_${b + 1}.pdf`, bytes: pdfBytes });
+        }
+        return results;
+    }
+
+    // =====================================================================
+    // PROCESSOR: STANDARD FIRST AID (SFA)
+    // =====================================================================
+    async function processSfa(rows, templateBytes) {
+        const HOST_DATA = {
+            "Host Name": "City of Markham",
+            "Host Phone": "9054703590 EXT 4342",
+            "Host Address": "8600 McCowan Road",
+            "Host City": "Markham",
+            "Host Province": "ON",
+            "Host Postal Code": "L3P 3M2",
+            "Facility Name": "Centennial C.C.",
+            "Facility Phone": "9054703590 EXT 4342"
+        };
+
+        const candidateMap = [];
+        for (let i = 1; i <= 10; i++) {
+            const s = String(i);
+            candidateMap.push({
+                name: `NAME ${s}`,
+                addr: `Address ${s}`,
+                apt: `Apt# ${s}`,
+                city: `City ${s}`,
+                zip: `Postal Code ${s}`,
+                email: `Email ${s}`,
+                phone: `Phone ${s}`,
+                dd: `Day ${s}`,
+                mm: `Month ${s}`,
+                yy: `Year ${s}`
+            });
+        }
+
+        const BATCH_SIZE = 10;
+        const totalBatches = Math.ceil(rows.length / BATCH_SIZE);
+        const results = [];
+
+        for (let b = 0; b < totalBatches; b++) {
+            const batch = rows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const form = pdfDoc.getForm();
+
+            for (const [field, value] of Object.entries(HOST_DATA)) {
+                setField(form, field, value);
+            }
+
+            for (let i = 0; i < batch.length && i < candidateMap.length; i++) {
+                const row = batch[i];
+                const fields = candidateMap[i];
+                const fullName = cleanName(row['AttendeeName'] || '');
+                const { dd, mm, yy } = parseDate(row['DateOfBirth'], true);
+
+                setField(form, fields.name, fullName);
+                setField(form, fields.addr, row['Street'] || '');
+                setField(form, fields.apt, '');
+                setField(form, fields.city, row['City'] || '');
+                setField(form, fields.zip, row['PostalCode'] || '');
+                setField(form, fields.email, row['E-mail'] || '');
+                setField(form, fields.phone, row['AttendeePhone'] || '');
+                setField(form, fields.dd, dd);
+                setField(form, fields.mm, mm);
+                setField(form, fields.yy, yy);
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `SFA_Test_Sheet_${b + 1}.pdf`, bytes: pdfBytes });
+        }
+        return results;
+    }
+
+    // =====================================================================
+    // PROCESSOR: AIRWAY MANAGEMENT
+    // =====================================================================
+    async function processAirwayManagement(rows, templateBytes) {
+        const HOST_FIELDS = {
+            "Host Name": "City of Markham",
+            "Host Area Code": "905",
+            "Host Telephone #": "4703590 EXT 4342",
+            "Host Address": "8600 McCowan Road",
+            "Host City": "Markham",
+            "Host Prov": "ON",
+            "Host Postal Code": "L3P 3M2",
+            "Facility Name": "Centennial C.C.",
+            "Facility Area Code": "905",
+            "Facility Telephone #": "4703590 EXT 4342",
+            "Host Name Reverse": "City of Markham",
+            "Host Area Code Reverse": "905",
+            "Host Telephone # Reverse": "4703590 EXT 4342",
+            "Facility Name Reverse": "Centennial C.C.",
+            "Facility Area Code Reverse": "905",
+            "Facility Telephone # Reverse": "4703590 EXT 4342"
+        };
+
+        const candidateMap = [];
+        for (let i = 1; i <= 10; i++) {
+            const s = String(i);
+            const pCode = (i === 5) ? "postal code5" : `postal code ${s}`;
+            candidateMap.push({
+                name: `Name ${s}`,
+                addr: `address ${s}`,
+                apt: `apt# ${s}`,
+                city: `city ${s}`,
+                zip: pCode,
+                email: `email ${s}`,
+                phone: `phone ${s}`,
+                dd: `day ${s}`,
+                mm: `month ${s}`,
+                yy: `year ${s}`
+            });
+        }
+
+        const BATCH_SIZE = 10;
+        const totalBatches = Math.ceil(rows.length / BATCH_SIZE);
+        const results = [];
+
+        for (let b = 0; b < totalBatches; b++) {
+            const batch = rows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const form = pdfDoc.getForm();
+
+            for (const [field, value] of Object.entries(HOST_FIELDS)) {
+                setField(form, field, value);
+            }
+
+            for (let i = 0; i < batch.length && i < candidateMap.length; i++) {
+                const row = batch[i];
+                const fields = candidateMap[i];
+                const fullName = cleanName(row['AttendeeName'] || '');
+                const { dd, mm, yy } = parseDate(row['DateOfBirth'], false);
+
+                setField(form, fields.name, fullName);
+                setField(form, fields.addr, row['Street'] || '');
+                setField(form, fields.apt, '');
+                setField(form, fields.city, row['City'] || '');
+                setField(form, fields.zip, row['PostalCode'] || '');
+                setField(form, fields.email, row['E-mail'] || '');
+                setField(form, fields.phone, row['AttendeePhone'] || '');
+                setField(form, fields.dd, dd);
+                setField(form, fields.mm, mm);
+                setField(form, fields.yy, yy);
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `Airway_Mgmt_Batch_${b + 1}.pdf`, bytes: pdfBytes });
+        }
+        return results;
+    }
+
+    // =====================================================================
+    // PROCESSOR: NATIONAL LIFEGUARD - POOL
+    // =====================================================================
+    async function processNationalLifeguard(rows, templateBytes) {
+        const HOST_DATA = {
+            "Host Name": "City of Markham",
+            "Host Area": "905",
+            "Host Phone": "4703590 EXT 4342",
+            "Host Street": "8600 McCowan Road",
+            "Host City": "Markham",
+            "Host Prov": "ON",
+            "Host Postal": "L3P 3M2",
+            "Exam Facility": "Centennial C.C.",
+            "Exam Area": "905",
+            "Exam Phone": "4703590 EXT 4342"
+        };
+
+        function getSlotData(row, fieldId, visibleNumber) {
+            const p = String(fieldId);
+            const fullName = String(row['AttendeeName'] || '').trim();
+            let last = '', first = '';
+
+            if (fullName.includes(',')) {
+                const parts = fullName.split(',');
+                if (parts.length >= 2) {
+                    last = parts[0].trim();
+                    first = parts[1].trim();
+                }
+            } else if (fullName.includes(' ')) {
+                const parts = fullName.split(' ');
+                last = parts[parts.length - 1].trim();
+                first = parts.slice(0, -1).join(' ').trim();
+            } else {
+                last = fullName;
+                first = '-';
+            }
+
+            const { dd, mm, yy } = parseDate(row['DateOfBirth'], true);
+
+            const data = {};
+            data[`${p}.1`] = last;
+            data[`${p}.4`] = first;
+            data[`${p}.5`] = row['Street'] || '';
+            data[`${p}.6`] = row['City'] || '';
+            data[`${p}.7`] = row['Province'] || 'ON';
+            data[`${p}.8`] = row['PostalCode'] || '';
+            data[`${p}.9`] = row['E-mail'] || '';
+            data[`${p}.10`] = row['AttendeePhone'] || '';
+            data[`${p}.11`] = yy;
+            data[`${p}.12`] = mm;
+            data[`${p}.13`] = dd;
+
+            if (visibleNumber > 8) {
+                data[`${p}X`] = String(visibleNumber);
+            }
+
+            return data;
+        }
+
+        const results = [];
+
+        // 1. Master Sheet (First 8 candidates)
+        const batch1 = rows.slice(0, 8);
+        if (batch1.length > 0) {
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const form = pdfDoc.getForm();
+
+            for (const [field, value] of Object.entries(HOST_DATA)) {
+                setField(form, field, value);
+            }
+
+            for (let i = 0; i < batch1.length; i++) {
+                const slotData = getSlotData(batch1[i], i + 1, i + 1);
+                for (const [field, value] of Object.entries(slotData)) {
+                    setField(form, field, value);
+                }
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `NL_Pool_1_Master.pdf`, bytes: pdfBytes });
+        }
+
+        // 2. Continuation Sheets (groups of 8)
+        let startIndex = 8;
+        let batchCounter = 2;
+
+        while (startIndex < rows.length) {
+            const batchNext = rows.slice(startIndex, startIndex + 8);
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const form = pdfDoc.getForm();
+
+            for (const [field, value] of Object.entries(HOST_DATA)) {
+                setField(form, field, value);
+            }
+
+            for (let i = 0; i < batchNext.length; i++) {
+                const slotId = i + 1;
+                const realNumber = (startIndex + 1) + i;
+                const slotData = getSlotData(batchNext[i], slotId, realNumber);
+                for (const [field, value] of Object.entries(slotData)) {
+                    setField(form, field, value);
+                }
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `NL_Pool_${batchCounter}_Continuation.pdf`, bytes: pdfBytes });
+
+            startIndex += 8;
+            batchCounter++;
+        }
+
+        return results;
+    }
+
+    // =====================================================================
+    // PROCESSOR: LEADERSHIP MASTERSHEET
+    // =====================================================================
+    async function processLeadershipMastersheet(rows, templateBytes) {
+        const HOST_DATA = {
+            "Host Name": "City of Markham",
+            "Host Area": "905",
+            "Host Phone": "4703590 EXT 4342",
+            "Host Street": "8600 McCowan Road",
+            "Host City": "Markham",
+            "Host Province": "ON",
+            "Host Postal": "L3P 3M2",
+            "Host Facility": "Centennial C.C.",
+            "Host Facility Area": "905",
+            "Host Facility Phone": "4703590 EXT 4342"
+        };
+
+        function getSlotData(row, fieldId, visibleNumber) {
+            const p = String(fieldId);
+            const fullName = cleanName(row['AttendeeName'] || '');
+            const street = row['Street'] || '';
+            const city = row['City'] || '';
+            const zipCode = row['PostalCode'] || '';
+            const fullAddress = [street, `${city} ${zipCode}`].filter(x => x.trim()).join(', ');
+
+            let formattedDob = '';
+            const rawDob = row['DateOfBirth'] || '';
+            if (rawDob) {
+                const { dd, mm, yy } = parseDate(rawDob, false);
+                if (dd && mm && yy) {
+                    formattedDob = `${yy}/${mm}/${dd}`;
+                }
+            }
+
+            const data = {};
+            data[`${p}.1`] = fullName;
+            data[`${p}.2`] = fullAddress;
+            data[`${p}.3`] = row['AttendeePhone'] || '';
+            data[`${p}.4`] = row['E-mail'] || '';
+            data[`${p}.5`] = formattedDob;
+
+            if (parseInt(fieldId) > 3) {
+                data[`${p}.0`] = String(visibleNumber);
+            }
+
+            return data;
+        }
+
+        const totalCandidates = rows.length;
+        const results = [];
+
+        // 1. Master File (Candidates 1-9)
+        const batch1 = rows.slice(0, 9);
+        if (batch1.length > 0) {
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const form = pdfDoc.getForm();
+
+            for (const [field, value] of Object.entries(HOST_DATA)) {
+                setField(form, field, value);
+            }
+            setField(form, "Total Enrolled", String(totalCandidates));
+            setCheckbox(form, "Exam Fees Attached", true);
+
+            for (let i = 0; i < batch1.length; i++) {
+                const currentNum = i + 1;
+                const slotData = getSlotData(batch1[i], currentNum, currentNum);
+                for (const [field, value] of Object.entries(slotData)) {
+                    setField(form, field, value);
+                }
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `Leadership_Master_1.pdf`, bytes: pdfBytes });
+        }
+
+        // 2. Continuation Files (Candidates 10+, 6 per sheet, back page only)
+        let startIndex = 9;
+        let batchCounter = 2;
+
+        while (startIndex < totalCandidates) {
+            const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+
+            // Remove page 1 (front page) - keep only back page
+            if (pdfDoc.getPageCount() > 1) {
+                pdfDoc.removePage(0);
+            }
+
+            const form = pdfDoc.getForm();
+
+            for (const [field, value] of Object.entries(HOST_DATA)) {
+                setField(form, field, value);
+            }
+            setField(form, "Total Enrolled", String(totalCandidates));
+
+            const batchNext = rows.slice(startIndex, startIndex + 6);
+            for (let i = 0; i < batchNext.length; i++) {
+                const pdfFieldId = i + 4;
+                if (pdfFieldId > 9) break;
+                const actualCandidateNum = (startIndex + 1) + i;
+                const slotData = getSlotData(batchNext[i], pdfFieldId, actualCandidateNum);
+                for (const [field, value] of Object.entries(slotData)) {
+                    setField(form, field, value);
+                }
+            }
+
+            form.flatten();
+            const pdfBytes = await pdfDoc.save();
+            results.push({ name: `Leadership_Continuation_${batchCounter}.pdf`, bytes: pdfBytes });
+
+            startIndex += 6;
+            batchCounter++;
+        }
+
+        return results;
+    }
+
+    // =====================================================================
+    // PROCESSOR MAPPING
+    // =====================================================================
+    const PROCESSORS = {
+        "efa": processEfa,
+        "bronze_med": processBronzeMed,
+        "bronze_cross": processBronzeCross,
+        "bronze_star": processBronzeStar,
+        "sfa": processSfa,
+        "airway_management": processAirwayManagement,
+        "national_lifeguard": processNationalLifeguard,
+        "leadership_mastersheet": processLeadershipMastersheet
+    };
+
+    // =====================================================================
+    // FORM SUBMISSION HANDLER
+    // =====================================================================
+    const form = document.getElementById('uploadForm');
+    const btn = document.getElementById('submitBtn');
+    const btnText = document.getElementById('btnText');
+    const originalText = btnText.textContent;
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const csvFileInput = document.getElementById('csvFile');
+        const pdfFileInput = document.getElementById('pdfTemplate');
+        const formType = document.getElementById('formType').value;
+
+        if (!csvFileInput.files[0] || !pdfFileInput.files[0] || !formType) {
+            alert('Please fill in all fields.');
+            return;
+        }
+
+        btn.classList.add('loading');
+        btn.disabled = true;
+        btnText.textContent = "Processing...";
+
+        try {
+            // 1. Read CSV
+            const csvText = await csvFileInput.files[0].text();
+            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+
+            if (parsed.errors.length > 0) {
+                console.warn('CSV parse warnings:', parsed.errors);
+            }
+
+            const rows = parsed.data;
+            if (rows.length === 0) {
+                alert('CSV file is empty or has no data rows.');
+                return;
+            }
+
+            // 2. Read PDF template
+            const pdfArrayBuffer = await pdfFileInput.files[0].arrayBuffer();
+            const templateBytes = new Uint8Array(pdfArrayBuffer);
+
+            // 3. Process
+            const processor = PROCESSORS[formType];
+            if (!processor) {
+                alert('Unknown form type selected.');
+                return;
+            }
+
+            const generatedPdfs = await processor(rows, templateBytes);
+
+            if (generatedPdfs.length === 0) {
+                alert('No PDFs were generated. Check your CSV data.');
+                return;
+            }
+
+            // 4. Show results as clickable links
+            const resultsPanel = document.getElementById('resultsPanel');
+            const pdfLinkList = document.getElementById('pdfLinkList');
+            pdfLinkList.innerHTML = '';
+
+            for (const pdf of generatedPdfs) {
+                const blob = new Blob([pdf.bytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = url;
+                a.target = '_blank';
+                a.textContent = pdf.name;
+                li.appendChild(a);
+                pdfLinkList.appendChild(li);
+            }
+
+            resultsPanel.classList.add('visible');
+
+        } catch (error) {
+            console.error('Error:', error);
+            alert(`An error occurred: ${error.message}`);
+        } finally {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            btnText.textContent = originalText;
+        }
+    });
+    </script>
+</body>
+</html>
