@@ -12,7 +12,6 @@
 
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
     <style>
@@ -1161,23 +1160,12 @@
                 return;
             }
 
-            // 4. Create ZIP
-            const zip = new JSZip();
+            // 4. Open each PDF in a new browser tab
             for (const pdf of generatedPdfs) {
-                zip.file(pdf.name, pdf.bytes);
+                const blob = new Blob([pdf.bytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
             }
-
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-
-            // 5. Download
-            const downloadUrl = URL.createObjectURL(zipBlob);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = 'Filled_Forms.zip';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(downloadUrl);
 
         } catch (error) {
             console.error('Error:', error);
