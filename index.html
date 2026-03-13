@@ -178,6 +178,44 @@
             display: flex; align-items: center; justify-content: center; gap: 0.5rem;
             font-size: 0.7rem; color: rgba(255, 255, 255, 0.35);
         }
+
+        #resultsPanel {
+            display: none;
+            margin-top: 1.5rem;
+            text-align: left;
+        }
+        #resultsPanel.visible { display: block; }
+        #resultsPanel h5 {
+            color: var(--accent-primary);
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            font-size: 1rem;
+        }
+        .pdf-link-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .pdf-link-list li {
+            margin-bottom: 0.5rem;
+        }
+        .pdf-link-list a {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            border-radius: 0.5rem;
+            color: white;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .pdf-link-list a:hover {
+            background: rgba(16, 185, 129, 0.25);
+            border-color: var(--accent-primary);
+        }
     </style>
 </head>
 <body>
@@ -226,6 +264,11 @@
                     <span id="btnText">Generate PDFs</span>
                 </button>
             </form>
+
+            <div id="resultsPanel">
+                <h5>Generated PDFs — click to open:</h5>
+                <ul class="pdf-link-list" id="pdfLinkList"></ul>
+            </div>
 
             <div class="privacy-badge">
                 <i data-lucide="shield-check" width="14"></i>
@@ -1160,12 +1203,24 @@
                 return;
             }
 
-            // 4. Open each PDF in a new browser tab
+            // 4. Show results as clickable links
+            const resultsPanel = document.getElementById('resultsPanel');
+            const pdfLinkList = document.getElementById('pdfLinkList');
+            pdfLinkList.innerHTML = '';
+
             for (const pdf of generatedPdfs) {
                 const blob = new Blob([pdf.bytes], { type: 'application/pdf' });
                 const url = URL.createObjectURL(blob);
-                window.open(url, '_blank');
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = url;
+                a.target = '_blank';
+                a.textContent = pdf.name;
+                li.appendChild(a);
+                pdfLinkList.appendChild(li);
             }
+
+            resultsPanel.classList.add('visible');
 
         } catch (error) {
             console.error('Error:', error);
