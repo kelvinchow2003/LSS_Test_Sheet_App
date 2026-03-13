@@ -1,0 +1,3 @@
+@echo off
+echo Opening Test Sheet Automator in your browser...
+start "" "%~dp0index.html"
