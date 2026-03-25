@@ -8,7 +8,7 @@ from form_logic import process_efa, process_bronze_med, process_bronze_cross, pr
 app = Flask(__name__)
 
 # Configuration
-UPLOAD_FOLDER = 'outputs'
+UPLOAD_FOLDER = '/tmp/outputs'
 TEMPLATE_FOLDER = 'templates_pdf'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(TEMPLATE_FOLDER, exist_ok=True)
