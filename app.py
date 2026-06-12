@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import zipfile
 import shutil
-from form_logic import process_efa, process_bronze_med, process_bronze_cross, process_bronze_star, process_sfa, process_airway_management, process_national_lifeguard, process_leadership_mastersheet
+from form_logic import process_efa, process_bronze_med, process_bronze_cross, process_bronze_star, process_sfa, process_airway_management, process_national_lifeguard, process_leadership_mastersheet, process_nl_recert
 
 app = Flask(__name__)
 
@@ -43,6 +43,8 @@ FORM_CONFIG = {
         "filename": "95nlpool 2022_tsfillable 20250819 x.pdf",
         "func": process_national_lifeguard
     },
+    "nl_recert": { "filename": "95nlpoolrecert 2025_fillable 20250820 x.pdf", "func": process_nl_recert },
+
     "leadership_mastersheet": {
         "filename": "leadershipmastersheet_on_20250219_fillable.pdf",
         "func": process_leadership_mastersheet
